@@ -1,0 +1,177 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  api:
+    container_name: codeapi-api
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      CODEAPI_SANDBOX_BACKEND: http
+      CODEAPI_RUNTIME_SESSION_MODE: stateless
+      CODEAPI_EXECUTION_PROFILE: default
+      CODEAPI_BRIDGE_AUTH_MODE: static
+      CODEAPI_BRIDGE_DYNAMIC_WORKERS: "false"
+      CODEAPI_BRIDGE_TOKEN: ""
+      CODEAPI_INTERNAL_SERVICE_TOKEN: ${CODEAPI_INTERNAL_SERVICE_TOKEN:?CODEAPI_INTERNAL_SERVICE_TOKEN is required}
+      REDIS_PASSWORD: ${CODEAPI_REDIS_PASSWORD:?CODEAPI_REDIS_PASSWORD is required}
+    networks:
+      codeapi-private:
+      librechat-code:
+        aliases:
+          - codeapi-api
+    mem_limit: 768m
+    cpus: 1
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3112/v1/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  service-worker:
+    container_name: codeapi-worker
+    restart: unless-stopped
+    environment:
+      CODEAPI_SANDBOX_BACKEND: http
+      CODEAPI_RUNTIME_SESSION_MODE: stateless
+      CODEAPI_EXECUTION_PROFILE: default
+      CODEAPI_BRIDGE_AUTH_MODE: static
+      CODEAPI_BRIDGE_DYNAMIC_WORKERS: "false"
+      CODEAPI_BRIDGE_TOKEN: ""
+      CODEAPI_INTERNAL_SERVICE_TOKEN: ${CODEAPI_INTERNAL_SERVICE_TOKEN:?CODEAPI_INTERNAL_SERVICE_TOKEN is required}
+      REDIS_PASSWORD: ${CODEAPI_REDIS_PASSWORD:?CODEAPI_REDIS_PASSWORD is required}
+      PYTHON_CONCURRENCY: "1"
+      OTHER_CONCURRENCY: "2"
+    networks:
+      - codeapi-private
+    mem_limit: 1g
+    cpus: 2
+    logging: *default-logging
+
+  egress_gateway:
+    container_name: codeapi-egress
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      CODEAPI_EGRESS_GRANT_SECRET: ${CODEAPI_EGRESS_GRANT_SECRET:?CODEAPI_EGRESS_GRANT_SECRET is required}
+      CODEAPI_INTERNAL_SERVICE_TOKEN: ${CODEAPI_INTERNAL_SERVICE_TOKEN:?CODEAPI_INTERNAL_SERVICE_TOKEN is required}
+      REDIS_PASSWORD: ${CODEAPI_REDIS_PASSWORD:?CODEAPI_REDIS_PASSWORD is required}
+    networks:
+      codeapi-private:
+      codeapi-egress-path:
+        ipv4_address: 172.29.240.10
+    mem_limit: 512m
+    cpus: 1
+    logging: *default-logging
+
+  tool_call_server:
+    container_name: codeapi-tools
+    restart: unless-stopped
+    environment:
+      CODEAPI_INTERNAL_SERVICE_TOKEN: ${CODEAPI_INTERNAL_SERVICE_TOKEN:?CODEAPI_INTERNAL_SERVICE_TOKEN is required}
+      REDIS_PASSWORD: ${CODEAPI_REDIS_PASSWORD:?CODEAPI_REDIS_PASSWORD is required}
+    networks:
+      - codeapi-private
+    mem_limit: 512m
+    cpus: 1
+    logging: *default-logging
+
+  sandbox-runner:
+    container_name: codeapi-sandbox
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      KVM_ENABLED: "true"
+      CODEAPI_HARDENED_SANDBOX_MODE: "true"
+      SANDBOX_MAX_CONCURRENT_JOBS: "2"
+      SANDBOX_RUN_MEMORY_LIMIT: "536870912"
+      SANDBOX_RUN_CPU_TIME: "180000"
+      SANDBOX_RUN_TIMEOUT: "300000"
+      SANDBOX_OUTPUT_MAX_SIZE: "65536"
+      EGRESS_GATEWAY_URL: http://172.29.240.10:3190
+      SANDBOX_FORWARD_TARGET: 172.29.240.10:3190
+      LAUNCHER_VCPUS: "2"
+      LAUNCHER_RAM_MIB: "2048"
+    networks:
+      codeapi-private:
+      codeapi-egress-path:
+        ipv4_address: 172.29.240.11
+    mem_limit: 5g
+    cpus: 8
+    logging: *default-logging
+
+  file_server:
+    container_name: codeapi-files
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      MINIO_BUCKET: ${CODEAPI_MINIO_BUCKET:-codeapi-files}
+      MINIO_ACCESS_KEY: ${CODEAPI_MINIO_ACCESS_KEY:?CODEAPI_MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${CODEAPI_MINIO_SECRET_KEY:?CODEAPI_MINIO_SECRET_KEY is required}
+      REDIS_PASSWORD: ${CODEAPI_REDIS_PASSWORD:?CODEAPI_REDIS_PASSWORD is required}
+      CODEAPI_INTERNAL_SERVICE_TOKEN: ${CODEAPI_INTERNAL_SERVICE_TOKEN:?CODEAPI_INTERNAL_SERVICE_TOKEN is required}
+    networks:
+      - codeapi-private
+    mem_limit: 768m
+    cpus: 1
+    logging: *default-logging
+
+  redis:
+    container_name: codeapi-redis
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    ports: !reset []
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
+    environment:
+      REDIS_PASSWORD: ${CODEAPI_REDIS_PASSWORD:?CODEAPI_REDIS_PASSWORD is required}
+    volumes:
+      - codeapi_redis:/data
+    networks:
+      - codeapi-private
+    mem_limit: 512m
+    cpus: 1
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    container_name: codeapi-minio
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${CODEAPI_MINIO_ACCESS_KEY:?CODEAPI_MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${CODEAPI_MINIO_SECRET_KEY:?CODEAPI_MINIO_SECRET_KEY is required}
+    networks:
+      - codeapi-private
+    mem_limit: 768m
+    cpus: 1
+    logging: *default-logging
+
+volumes:
+  codeapi_redis:
+
+networks:
+  codeapi-private:
+    name: codeapi-private
+    internal: true
+  codeapi-egress-path:
+    name: codeapi-egress-path-v2
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.240.0/24
+  librechat-code:
+    name: librechat-code
+    external: true

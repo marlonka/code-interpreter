@@ -201,4 +201,5 @@ rm -f "$SMOKE_STDERR"
 rm -rf "$SMOKE_DIR"
 
 echo "Starting sandbox API server..."
+export SANDBOX_PIPE_ADDON="${SANDBOX_PIPE_ADDON:-/usr/local/lib/anonymous-pipes.node}"
 exec /usr/local/bin/sandbox-supervisor-policy bun run /sandbox_api/.build/index.js

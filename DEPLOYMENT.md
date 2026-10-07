@@ -17,12 +17,17 @@ Production-style local deployment for the LibreChat checkout at
 - Random internal, Redis, MinIO, egress, JWT, and execution-manifest secrets.
 - Stateless sessions and bounded CPU, memory, time, output, and concurrency.
 
-Installed upstream revision: `8764d019ecb4a503d6be34d8b8234f031b1f77e5`.
+Installed upstream release: `v1.10.4` (`a62d69e05a4541ac9a20722ac7ff3fcfecb6ed24`).
 
 The local patch in `service/src/sandbox-egress.ts` enables the narrowly scoped
-gateway socket for ordinary hardened executions. Current upstream grants the
+gateway channel for ordinary hardened executions. Release v1.10.4 grants the
 file upload route but omits this manifest flag, causing generated artifacts to
 be discarded with `artifact_delivery_failed`.
+
+The guest entrypoint also defaults `SANDBOX_PIPE_ADDON` to the installed native
+module. Docker build-stage environment variables do not survive the rootfs copy
+into the KVM guest; without this default v1.10.4 passes health checks but every
+execution fails before NsJail starts.
 
 ## Operations
 
@@ -48,22 +53,25 @@ Stop without deleting data:
 docker compose -p codeapi -f docker-compose.yaml -f compose.hardened.yml stop
 ```
 
-Do not use `down -v`: the `codeapi_minio` and `codeapi_codeapi_redis` volumes
+Do not use `down -v`: the `codeapi_minio_data` and `codeapi_codeapi_redis` volumes
 contain generated files and queue/session metadata.
 
 ## Update
 
 1. Back up `.env` in both repositories and the two named volumes.
-2. Fetch upstream and review changes against the pinned revision.
-3. Rebase the local hardening commit; keep the artifact-egress patch until it
+2. Fetch upstream tags and review the latest stable release against the pinned revision.
+3. Rebase the local hardening onto that release tag; keep the artifact-egress patch until it
    lands upstream.
 4. Rebuild, run the unit regression, then test authenticated execution plus
    generated-file download before serving users.
 
 ```powershell
 docker build -f service/Dockerfile --target development -t codeapi-service-test .
-docker run --rm codeapi-service-test bun test src/egress-grant.test.ts
+docker run --rm --mount "type=bind,source=${PWD}/service/src,target=/app/src,readonly" codeapi-service-test bun test src/egress-grant.test.ts
 ```
+
+Keep tracked shell scripts and patch files in LF format on Windows. Docker executes
+the shell scripts directly and applies the NsJail patch during the runner build.
 
 ## Feature policy
 

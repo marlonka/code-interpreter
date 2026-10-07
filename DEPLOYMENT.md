@@ -70,8 +70,9 @@ docker build -f service/Dockerfile --target development -t codeapi-service-test 
 docker run --rm --mount "type=bind,source=${PWD}/service/src,target=/app/src,readonly" codeapi-service-test bun test src/egress-grant.test.ts
 ```
 
-Keep tracked shell scripts and patch files in LF format on Windows. Docker executes
+Keep tracked shell scripts, Python templates, and patch files in LF format on Windows. Docker executes
 the shell scripts directly and applies the NsJail patch during the runner build.
+The plotting-code injector matches LF-delimited markers in the Python templates.
 
 ## Feature policy
 

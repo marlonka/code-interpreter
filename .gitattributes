@@ -8,3 +8,4 @@
 *.md text eol=lf
 *.sh text eol=lf
 *.patch text eol=lf
+*.py text eol=lf

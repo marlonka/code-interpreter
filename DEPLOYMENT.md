@@ -17,17 +17,24 @@ Production-style local deployment for the LibreChat checkout at
 - Random internal, Redis, MinIO, egress, JWT, and execution-manifest secrets.
 - Stateless sessions and bounded CPU, memory, time, output, and concurrency.
 
-Installed upstream release: `v1.10.4` (`a62d69e05a4541ac9a20722ac7ff3fcfecb6ed24`).
+Installed upstream release: `v1.10.5` (`58a023da4c47452f5e40114934679d0348c39064`).
 
 The local patch in `service/src/sandbox-egress.ts` enables the narrowly scoped
 gateway channel for ordinary hardened executions. Release v1.10.4 grants the
 file upload route but omits this manifest flag, causing generated artifacts to
-be discarded with `artifact_delivery_failed`.
+be discarded with `artifact_delivery_failed`. The local patch remains required on v1.10.5.
 
-The guest entrypoint also defaults `SANDBOX_PIPE_ADDON` to the installed native
-module. Docker build-stage environment variables do not survive the rootfs copy
-into the KVM guest; without this default v1.10.4 passes health checks but every
-execution fails before NsJail starts.
+Release v1.10.5 supplies the guest entrypoint default for `SANDBOX_PIPE_ADDON`.
+
+The KVM runner uses the official v1.10.5 image, pinned by commit and digest in
+`compose.hardened.yml`. Service images retain the local artifact-egress fix.
+Redis is pinned to 7.4.11 on the existing persistent volume.
+
+MinIO uses its final tagged upstream release, `RELEASE.2025-10-15T17-29-55Z`.
+The upstream image registry no longer permits public pulls. `docker/minio.Dockerfile`
+builds checksum-verified source from commit `9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a`
+with Go 1.27.2 and pinned base-image digests, preserving the existing S3 data volume.
+The previous image and volume archives are retained with the LibreChat upgrade backups.
 
 ## Operations
 

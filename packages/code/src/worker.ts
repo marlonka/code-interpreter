@@ -15,6 +15,7 @@ import {
 } from './protocol.js';
 import { EndpointRuntimeSupervisor } from './runtime.js';
 import { signBridgeRequest } from './identity.js';
+import { recoverWorkerCredential } from './credential-recovery.js';
 import { isWorkspaceToolRequest, WorkspaceToolError } from './workspace.js';
 
 import type {
@@ -97,6 +98,8 @@ export interface BridgeWorkerOptions {
   onRegistered?: (
     registration: BridgeWorkerRegistrationResponse,
   ) => void | Promise<void>;
+  /** Called only after registration and required readiness confirmation succeed. */
+  onReady?: () => void | Promise<void>;
   incarnationId?: string;
 }
 
@@ -839,6 +842,7 @@ export class BridgeWorker {
       await this.confirmReady(registration, signal);
     }
     this.lastRegisteredAtMs = registrationStartedAtMs;
+    if (!this.maintenanceOnly) await this.options.onReady?.();
     return registration;
   }
 
@@ -855,7 +859,7 @@ export class BridgeWorker {
         'Code API does not support explicit worker readiness confirmation',
       );
     }
-    await this.timedRequest(
+    const ready = await this.timedRequest<{ ready?: boolean }>(
       `${this.codeApiUrl}${bridgeWorkerPath(this.options.workerId)}/ready`,
       {
         protocolVersion: BRIDGE_PROTOCOL_VERSION,
@@ -869,6 +873,9 @@ export class BridgeWorker {
       ),
       signal,
     );
+    if (ready.ready !== true) {
+      throw new BridgeProtocolError('Code API did not confirm worker readiness');
+    }
   }
 
   async resetWorkspace(
@@ -1317,20 +1324,49 @@ export class BridgeWorker {
     if (Date.parse(identity.expiresAt) > validThroughMs) {
       return;
     }
-    const credential = await this.timedRequest<BridgeWorkerCredentialResponse>(
-      `${this.codeApiUrl}${bridgeWorkerPath(this.options.workerId)}` +
-        '/credentials/refresh',
-      { protocolVersion: BRIDGE_PROTOCOL_VERSION },
-      Math.max(
-        1,
-        Math.min(
-          transportTimeoutMs,
-          this.options.credentialRefreshTransportTimeoutMs ??
-            DEFAULT_CONTROL_TRANSPORT_TIMEOUT_MS,
-        ),
+    const timeoutMs = Math.max(
+      1,
+      Math.min(
+        transportTimeoutMs,
+        this.options.credentialRefreshTransportTimeoutMs ??
+          DEFAULT_CONTROL_TRANSPORT_TIMEOUT_MS,
       ),
-      signal,
     );
+    const deadline = performance.now() + timeoutMs;
+    let credential: BridgeWorkerCredentialResponse;
+    try {
+      credential = await this.timedRequest<BridgeWorkerCredentialResponse>(
+        `${this.codeApiUrl}${bridgeWorkerPath(this.options.workerId)}/credentials/refresh`,
+        { protocolVersion: BRIDGE_PROTOCOL_VERSION },
+        timeoutMs,
+        signal,
+      );
+    } catch (error) {
+      // Only bootstrap recovery. Auth failures during active work retain existing fencing/settlement rules.
+      if (
+        this.lastRegisteredAtMs !== 0 ||
+        !(error instanceof BridgeProtocolError) ||
+        error.status !== 401 ||
+        error.code !== 'CREDENTIAL_INVALID'
+      ) throw error;
+      signal?.throwIfAborted();
+      const remainingMs = Math.floor(deadline - performance.now());
+      if (remainingMs <= 0) {
+        throw new DOMException('Credential recovery timed out', 'TimeoutError');
+      }
+      const recoverySignal = AbortSignal.timeout(remainingMs);
+      credential = await recoverWorkerCredential({
+        codeApiUrl: this.codeApiUrl,
+        workerId: this.options.workerId,
+        privateKey: identity.privateKey,
+        validThroughMs,
+        fetchImpl: this.fetchImpl,
+        signal: signal == null
+          ? recoverySignal
+          : AbortSignal.any([signal, recoverySignal]),
+      });
+    }
+    signal?.throwIfAborted();
     if (
       credential.protocolVersion !== BRIDGE_PROTOCOL_VERSION ||
       credential.workerId !== this.options.workerId ||

@@ -5,30 +5,31 @@ Production-style local deployment for the LibreChat checkout at
 
 ## Security model
 
-- Ed25519 JWTs minted by LibreChat; no shared browser-facing API key.
-- Strict tenant identity with the single-tenant namespace `legacy`.
-- libkrun/KVM microVMs with a read-only guest root filesystem.
-- No CodeAPI host ports. LibreChat reaches only `codeapi-api` through the
-  external `librechat-code` network.
-- Redis, MinIO, file server, workers, and tool server stay on the internal
-  `codeapi-private` network.
-- The sandbox and policy-enforcing egress gateway share one dedicated bridge.
-  Its static address avoids passing Docker's host-only DNS stub into the VM.
-- Random internal, Redis, MinIO, egress, JWT, and execution-manifest secrets.
-- Stateless sessions and bounded CPU, memory, time, output, and concurrency.
+-   Ed25519 JWTs minted by LibreChat; no shared browser-facing API key.
+-   Strict tenant identity with the single-tenant namespace `legacy`.
+-   libkrun/KVM microVMs with a read-only guest root filesystem.
+-   No CodeAPI host ports. LibreChat reaches only `codeapi-api` through the
+    external `librechat-code` network.
+-   Redis, MinIO, file server, workers, and tool server stay on the internal
+    `codeapi-private` network.
+-   The sandbox and policy-enforcing egress gateway share one dedicated bridge.
+    Its static address avoids passing Docker's host-only DNS stub into the VM.
+-   Random internal, Redis, MinIO, egress, JWT, and execution-manifest secrets.
+-   Stateless sessions and bounded CPU, memory, time, output, and concurrency.
 
-Installed upstream release: `v1.10.5` (`58a023da4c47452f5e40114934679d0348c39064`).
+Installed upstream release: `v1.10.7` (`0eb6c2dcd697373692c6e7acde222bede23c8f29`).
 
 The local patch in `service/src/sandbox-egress.ts` enables the narrowly scoped
 gateway channel for ordinary hardened executions. Release v1.10.4 grants the
 file upload route but omits this manifest flag, causing generated artifacts to
-be discarded with `artifact_delivery_failed`. The local patch remains required on v1.10.5.
+be discarded with `artifact_delivery_failed`. The local patch remains required on v1.10.7.
 
 Release v1.10.5 supplies the guest entrypoint default for `SANDBOX_PIPE_ADDON`.
 
-The KVM runner uses the official v1.10.5 image, pinned by commit and digest in
+The KVM runner uses the official v1.10.5 image; runner inputs are unchanged through
+v1.10.7. It is pinned by commit and digest in
 `compose.hardened.yml`. Service images retain the local artifact-egress fix.
-Redis is pinned to 7.4.11 on the existing persistent volume.
+Redis is pinned to the October 22 rebuild of 7.4.11 on the existing persistent volume.
 
 MinIO uses its final tagged upstream release, `RELEASE.2025-10-15T17-29-55Z`.
 The upstream image registry no longer permits public pulls. `docker/minio.Dockerfile`

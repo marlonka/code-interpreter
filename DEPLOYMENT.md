@@ -17,18 +17,18 @@ Production-style local deployment for the LibreChat checkout at
 -   Random internal, Redis, MinIO, egress, JWT, and execution-manifest secrets.
 -   Stateless sessions and bounded CPU, memory, time, output, and concurrency.
 
-Installed upstream release: `v1.10.7` (`0eb6c2dcd697373692c6e7acde222bede23c8f29`).
+Installed upstream release: `v1.10.13` (`2fa9f0d43e8e38b7d6240bc76e2483c6a47c64c7`).
 
 The local patch in `service/src/sandbox-egress.ts` enables the narrowly scoped
 gateway channel for ordinary hardened executions. Release v1.10.4 grants the
 file upload route but omits this manifest flag, causing generated artifacts to
-be discarded with `artifact_delivery_failed`. The local patch remains required on v1.10.7.
+be discarded with `artifact_delivery_failed`. The local patch remains required on v1.10.13.
 
 Release v1.10.5 supplies the guest entrypoint default for `SANDBOX_PIPE_ADDON`.
 
-The KVM runner uses the official v1.10.5 image; runner inputs are unchanged through
-v1.10.7. It is pinned by commit and digest in
+The KVM runner uses the official v1.10.13 image, pinned by commit and digest in
 `compose.hardened.yml`. Service images retain the local artifact-egress fix.
+The packaged runtimes are Python 3.14.4, Node.js 24.22.1, and Bun 1.4.4.
 Redis is pinned to the October 22 rebuild of 7.4.11 on the existing persistent volume.
 
 MinIO uses its final tagged upstream release, `RELEASE.2025-10-15T17-29-55Z`.

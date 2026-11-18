@@ -593,7 +593,9 @@ describe('egress encrypted grants and handles', () => {
         exec_id: 'exec_123',
         tenant_id: 'tenant_abc',
         user_id: 'user_123',
+        tool_call_socket: true,
       });
+      expect(prepared.payload.tool_call_socket).toBe(true);
       expect(prepared.executionManifestClaims).toBeUndefined();
     } finally {
       env.HARDENED_SANDBOX_MODE = previousHardened;
@@ -615,7 +617,9 @@ describe('egress encrypted grants and handles', () => {
         exec_id: 'exec_123',
         tenant_id: 'tenant_abc',
         user_id: 'user_123',
+        tool_call_socket: true,
       });
+      expect(prepared.payload.tool_call_socket).toBe(true);
       expect(prepared.executionManifestClaims).toBeUndefined();
     } finally {
       env.HARDENED_SANDBOX_MODE = previousHardened;

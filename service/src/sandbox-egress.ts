@@ -32,10 +32,17 @@ export function prepareSandboxJobSecurity(args: BuildArgs): SandboxJobSecurity {
     throw new Error(MISSING_EGRESS_GATEWAY_ERROR);
   }
 
-  const rawClaims = buildExecutionManifestClaims(args);
+  /* Hardened sandboxes have no direct network path. Generated-file uploads
+   * therefore need the same narrowly scoped Unix-socket proxy used for
+   * programmatic tool calls, even when the submitted code calls no tools. */
+  const payload: t.PayloadBody = {
+    ...args.payload,
+    tool_call_socket: true,
+  };
+  const rawClaims = buildExecutionManifestClaims({ ...args, payload });
 
   return {
-    payload: args.payload,
+    payload,
     egressGrantClaims: rawClaims,
   };
 }
